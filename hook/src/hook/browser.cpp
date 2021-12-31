@@ -159,6 +159,7 @@ BOOL __stdcall new_CreateProcessAsUserW(
   return ret;
 }
 
+ci orig_cef_initialize;
 int __cdecl new_cef_initialize(const struct _cef_main_args_t* args,
                                const struct _cef_settings_t* settings,
                                cef_app_t* app,
