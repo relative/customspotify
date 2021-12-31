@@ -5,5 +5,10 @@
         <file>icons/plugin.png</file>
         <file>icons/script.png</file>
         <file>icons/printer.png</file>
+
+        <file>icons/css.png</file>
+        <file>icons/css_add.png</file>
+        <file>icons/css_delete.png</file>
+        <file>icons/css_go.png</file>
     </qresource>
 </RCC>
