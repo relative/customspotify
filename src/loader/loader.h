@@ -5,7 +5,7 @@
 #ifndef CUSTOMSPOTIFY_LOADER_H
 #define CUSTOMSPOTIFY_LOADER_H
 #include <QThread>
-#include <Windows.h>
+#include "ntdll.h" // #include <Windows.h>
 
 class Loader : public QThread {
   Q_OBJECT

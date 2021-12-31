@@ -7,11 +7,9 @@
 #include <TlHelp32.h>
 #include <vector>
 #include <Psapi.h>
-#include <shlwapi.h>
-#include "ntdll.h"
+#include <Shlwapi.h>
 
 #define NOINLINE __declspec(noinline)
-
 
 namespace {
   typedef NTSTATUS (NTAPI *_NtQueryInformationProcess)(
