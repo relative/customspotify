@@ -36,7 +36,8 @@ add_executable(customspotify
         src/resources.qrc
         src/main.cpp
         src/windows/MainWindow.cpp src/windows/MainWindow.h
-        src/loader/loader.cpp src/loader/loader.h src/loader/ntdll.h)
+        src/loader/loader.cpp src/loader/loader.h src/loader/ntdll.h
+        src/theme/theme.cpp src/theme/theme.h src/startup.cpp src/startup.h)
 
 target_link_libraries(customspotify PRIVATE Qt::Core Qt5::Core Qt::WinMain Qt5::WinMain Qt::Widgets Qt5::Widgets Shlwapi.lib)
 
