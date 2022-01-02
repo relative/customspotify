@@ -8,8 +8,11 @@
 #include <vector>
 #include <Psapi.h>
 #include <Shlwapi.h>
+#include <filesystem>
 
 #define NOINLINE __declspec(noinline)
+
+namespace fs = std::filesystem;
 
 namespace {
   typedef NTSTATUS (NTAPI *_NtQueryInformationProcess)(
@@ -47,6 +50,16 @@ namespace {
                       nullptr);
 
     return reinterpret_cast<PVOID>(pNtHeaders.OptionalHeader.ImageBase + pNtHeaders.OptionalHeader.AddressOfEntryPoint);
+  }
+
+  fs::path get_dll_path() {
+    auto cwd = fs::current_path();
+    if (fs::exists(cwd / "hook.dll")) {
+      return cwd/"hook.dll";
+    } else if (fs::exists(cwd / "hook/hook.dll")) {
+      return cwd/"hook/hook.dll";
+    }
+    throw std::runtime_error("couldn't find hook DLL");
   }
 }
 
@@ -173,7 +186,8 @@ void Loader::spotify_process_found(HANDLE hOrigProc, DWORD dwPid, char path[MAX_
   SIZE_T byteBuf;
 
   // Write DLL path to new process
-  auto dllPath = LR"(D:\spotify\customspotify\build\debug\hook\hook.dll)";
+  // TODO: verify signature in rel builds
+  const wchar_t* dllPath = get_dll_path().wstring().c_str();
   SIZE_T dwSize = (wcslen(dllPath) + 1) * sizeof(wchar_t);
   auto pathAddress = VirtualAllocEx(hProc,
                                     nullptr, dwSize,
