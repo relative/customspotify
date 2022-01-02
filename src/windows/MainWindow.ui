@@ -30,27 +30,44 @@
        <enum>QTabWidget::Rounded</enum>
       </property>
       <property name="currentIndex">
-       <number>2</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="tabHome">
        <attribute name="icon">
-        <iconset theme=":/icons/home.png"/>
+        <iconset resource="../resources.qrc">
+         <normaloff>:/icons/home.png</normaloff>:/icons/home.png</iconset>
        </attribute>
        <attribute name="title">
         <string>Home</string>
        </attribute>
       </widget>
-      <widget class="QWidget" name="tabPlugins">
+      <widget class="QWidget" name="tabScripts">
        <attribute name="icon">
-        <iconset theme=":/icons/plugin.png"/>
+        <iconset resource="../resources.qrc">
+         <normaloff>:/icons/script.png</normaloff>:/icons/script.png</iconset>
        </attribute>
        <attribute name="title">
-        <string>Plugins</string>
+        <string>Scripts</string>
+       </attribute>
+       <layout class="QGridLayout" name="gridLayout_4">
+        <item row="0" column="0">
+         <widget class="QListWidget" name="lstScripts"/>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabThemes">
+       <attribute name="icon">
+        <iconset resource="../resources.qrc">
+         <normaloff>:/icons/css.png</normaloff>:/icons/css.png</iconset>
+       </attribute>
+       <attribute name="title">
+        <string>Themes</string>
        </attribute>
       </widget>
       <widget class="QWidget" name="tabLog">
        <attribute name="icon">
-        <iconset theme=":/icons/printer.png"/>
+        <iconset resource="../resources.qrc">
+         <normaloff>:/icons/printer.png</normaloff>:/icons/printer.png</iconset>
        </attribute>
        <attribute name="title">
         <string>Log</string>
@@ -92,6 +109,8 @@ p, li { white-space: pre-wrap; }
    </layout>
   </widget>
  </widget>
- <resources/>
+ <resources>
+  <include location="../resources.qrc"/>
+ </resources>
  <connections/>
 </ui>

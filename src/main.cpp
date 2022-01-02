@@ -4,8 +4,15 @@
 #include "windows/MainWindow.h"
 #include "loader/loader.h"
 
+#include "script/scriptmanager.h"
+
+#include "startup.h"
+
 Loader* g_Loader = new Loader();
 MainWindow* g_MainWindow;
+
+ScriptManager* g_ScriptManager;
+
 namespace {
   void init_theme() {
     qApp->setStyle(QStyleFactory::create("fusion"));
@@ -46,6 +53,11 @@ int main(int argc, char** argv) {
   QApplication app(argc, argv);
 
   init_theme();
+  startup_create_directories();
+
+  qRegisterMetaType<std::string>();
+
+  g_ScriptManager = new ScriptManager();
 
   g_MainWindow = new MainWindow();
   g_MainWindow->show();

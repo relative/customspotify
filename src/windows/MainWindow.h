@@ -7,6 +7,7 @@
 
 #include <QMainWindow>
 #include <string>
+#include "../script/script.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -18,7 +19,13 @@ public:
   MainWindow(QWidget *parent = nullptr);
   ~MainWindow();
 
+  void setup_scripts();
+  void add_script(const std::string& filename, Script* script);
   void add_log_entry(const char* fmt, ...);
+public slots:
+  void scriptAdded(const std::string& filename, Script* script);
+  void scriptRemoved(const std::string& filename, Script* script);
+  void scriptUpdated(const std::string& filename, Script* script);
 private:
   Ui::MainWindow *ui;
 };

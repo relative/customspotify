@@ -24,8 +24,10 @@ project(customspotify)
 
 set(CMAKE_CXX_STANDARD 17)
 
-# Qt5 from vcpkg
+# Qt5, nlohmann-json, efsw from vcpkg
 find_package(Qt5 COMPONENTS Core Widgets REQUIRED)
+find_package(efsw CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
@@ -35,9 +37,16 @@ add_subdirectory(hook)
 add_executable(customspotify
         src/resources.qrc
         src/main.cpp
-        src/windows/MainWindow.cpp src/windows/MainWindow.h
+        src/startup.cpp src/startup.h
         src/loader/loader.cpp src/loader/loader.h src/loader/ntdll.h
-        src/theme/theme.cpp src/theme/theme.h src/startup.cpp src/startup.h)
+        src/windows/MainWindow.cpp src/windows/MainWindow.h src/windows/MainWindow.ui
+        src/windows/ScriptWidget.cpp src/windows/ScriptWidget.h src/windows/ScriptWidget.ui
+        src/theme/theme.cpp src/theme/theme.h
+        src/script/scriptmanager.cpp src/script/scriptmanager.h src/script/script.cpp src/script/script.h)
 
-target_link_libraries(customspotify PRIVATE Qt::Core Qt5::Core Qt::WinMain Qt5::WinMain Qt::Widgets Qt5::Widgets Shlwapi.lib)
+target_link_libraries(customspotify PRIVATE
+        Qt::Core Qt5::Core Qt::WinMain Qt5::WinMain Qt::Widgets Qt5::Widgets
+        nlohmann_json nlohmann_json::nlohmann_json
+        efsw::efsw
+        Shlwapi.lib)
 
