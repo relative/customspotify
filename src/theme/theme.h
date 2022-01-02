@@ -1,0 +1,9 @@
+#ifndef CUSTOMSPOTIFY_THEME_H
+#define CUSTOMSPOTIFY_THEME_H
+
+class Theme {
+
+};
+
+
+#endif //CUSTOMSPOTIFY_THEME_H
