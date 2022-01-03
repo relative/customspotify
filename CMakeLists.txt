@@ -32,7 +32,9 @@ find_package(nlohmann_json CONFIG REQUIRED)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
-
+set(CUSTOMSPOTIFY_LL Qt::Core Qt5::Core Qt::WinMain Qt5::WinMain Qt::Widgets Qt5::Widgets
+        nlohmann_json nlohmann_json::nlohmann_json
+        efsw::efsw)
 add_subdirectory(hook)
 add_executable(customspotify
         src/resources.qrc
@@ -44,9 +46,13 @@ add_executable(customspotify
         src/theme/theme.cpp src/theme/theme.h
         src/script/scriptmanager.cpp src/script/scriptmanager.h src/script/script.cpp src/script/script.h)
 
-target_link_libraries(customspotify PRIVATE
-        Qt::Core Qt5::Core Qt::WinMain Qt5::WinMain Qt::Widgets Qt5::Widgets
-        nlohmann_json nlohmann_json::nlohmann_json
-        efsw::efsw
-        Shlwapi.lib)
+if (MSVC)
+    target_link_libraries(customspotify PRIVATE
+            ${CUSTOMSPOTIFY_LL}
+            Shlwapi.lib wbemuuid.lib)
+else()
+    target_link_libraries(customspotify PRIVATE
+            ${CUSTOMSPOTIFY_LL})
+endif()
+
 
