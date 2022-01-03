@@ -7,9 +7,9 @@ namespace fs = std::filesystem;
 
 ScriptManager::ScriptManager() {
   auto p = std::filesystem::current_path() / "scripts";
-
+  this->directory = p.string();
   this->watcher = new efsw::FileWatcher(true);
-  this->watcherID = watcher->addWatch(p.string(), this, true);
+  this->watcherID = watcher->addWatch(directory, this, true);
   watcher->watch();
 
   Script* script;

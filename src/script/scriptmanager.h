@@ -17,7 +17,7 @@ public:
   ScriptManager();
 
   std::map<std::string, Script*> scripts;
-
+  std::string directory;
   void handleFileAction( efsw::WatchID watchId, const std::string& dir, const std::string& filename, efsw::Action action, std::string oldFilename ) override;
 signals:
   void scriptAdded(const std::string& filename, Script* script);
