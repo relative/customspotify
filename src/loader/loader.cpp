@@ -9,6 +9,8 @@
 #include <Psapi.h>
 #include <Shlwapi.h>
 #include <filesystem>
+#include <QtDebug>
+#include "eventsink.h"
 
 #define NOINLINE __declspec(noinline)
 
@@ -51,18 +53,111 @@ namespace {
 
     return reinterpret_cast<PVOID>(pNtHeaders.OptionalHeader.ImageBase + pNtHeaders.OptionalHeader.AddressOfEntryPoint);
   }
+}
 
-  fs::path get_dll_path() {
-    auto cwd = fs::current_path();
-    if (fs::exists(cwd / "hook.dll")) {
-      return cwd/"hook.dll";
-    } else if (fs::exists(cwd / "hook/hook.dll")) {
-      return cwd/"hook/hook.dll";
-    }
-    throw std::runtime_error("couldn't find hook DLL");
+void subscribe_wmi(IWbemLocator* pLoc,
+                   IWbemServices* pSvc,
+                   IUnsecuredApartment* pApp,
+                   EventSink* pSink,
+                   IUnknown* pStubUnk,
+                   IWbemObjectSink* pStubSink) {
+  HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  if (FAILED(hr))
+    throw std::runtime_error("Failed to initialize COM: " + std::to_string(hr));
+  hr = CoInitializeSecurity(
+      nullptr,
+      -1,
+      nullptr,
+      nullptr,
+      RPC_C_AUTHN_LEVEL_DEFAULT,
+      RPC_C_IMP_LEVEL_IMPERSONATE,
+      nullptr,
+      EOAC_NONE,
+      nullptr);
+  if (FAILED(hr)) {
+    CoUninitialize();
+    throw std::runtime_error("Failed to initialize COM security level: " + std::to_string(hr));
+  }
+
+  hr = CoCreateInstance(
+      CLSID_WbemLocator,
+      nullptr,
+      CLSCTX_INPROC_SERVER,
+      IID_IWbemLocator, reinterpret_cast<void**>(&pLoc));
+  if (FAILED(hr)) {
+    CoUninitialize();
+    throw std::runtime_error("Failed to create WbemLocator instance: " + std::to_string(hr));
+  }
+
+  hr = pLoc->ConnectServer(
+      _bstr_t(L"ROOT\\CIMV2"),
+      nullptr,
+      nullptr,
+      0,
+      0,
+      0,
+      0,
+      &pSvc);
+  if (FAILED(hr)) {
+    pLoc->Release();
+    CoUninitialize();
+    throw std::runtime_error("Failed to connect to WMI: " + std::to_string(hr));
+  }
+
+  hr = CoSetProxyBlanket(
+      pSvc,
+      RPC_C_AUTHN_WINNT,
+      RPC_C_AUTHZ_NONE,
+      nullptr,
+      RPC_C_AUTHN_LEVEL_CALL,
+      RPC_C_IMP_LEVEL_IMPERSONATE,
+      nullptr,
+      EOAC_NONE);
+  if (FAILED(hr)) {
+    pSvc->Release();
+    pLoc->Release();
+    CoUninitialize();
+    throw std::runtime_error("Failed to set proxy blanket: " + std::to_string(hr));
+  }
+
+  hr = CoCreateInstance(
+      CLSID_UnsecuredApartment,
+      nullptr,
+      CLSCTX_LOCAL_SERVER,
+      IID_IUnsecuredApartment, reinterpret_cast<void**>(&pApp));
+  if (FAILED(hr)) {
+    pSvc->Release();
+    pLoc->Release();
+    CoUninitialize();
+    throw std::runtime_error("Failed to create UnsecuredApartment instance: " + std::to_string(hr));
+  }
+
+  pApp->CreateObjectStub(pSink, &pStubUnk);
+
+  pStubUnk->QueryInterface(IID_IWbemObjectSink, reinterpret_cast<void**>(&pStubSink));
+
+  hr = pSvc->ExecNotificationQueryAsync(
+      _bstr_t("WQL"),
+      _bstr_t("SELECT * FROM __InstanceCreationEvent WITHIN 1 WHERE " // PollingInterval = 1.fsec
+              "TargetInstance ISA 'Win32_Process' AND TargetInstance.Name = 'Spotify.exe'"),
+      WBEM_FLAG_SEND_STATUS,
+      nullptr,
+      pStubSink);
+  if (FAILED(hr)) {
+    pSvc->Release();
+    pLoc->Release();
+    pApp->Release();
+    pStubUnk->Release();
+    pSink->Release();
+    pStubSink->Release();
+    CoUninitialize();
+    throw std::runtime_error("Failed to setup WMI notification for Spotify.exe: " + std::to_string(hr));
   }
 }
 
+Loader::Loader() {
+  this->start();
+}
 
 void Loader::run() {
   _NtQueryInformationProcess NtQueryInformationProcess =
@@ -73,81 +168,107 @@ void Loader::run() {
     g_MainWindow->add_log_entry("Please submit a bug report with your Windows version.");
     return;
   }
+  IWbemLocator* pLoc = nullptr;
+  IWbemServices* pSvc = nullptr;
+  IUnsecuredApartment* pApp = nullptr;
+  EventSink* pSink = new EventSink();
+  IUnknown* pStubUnk = nullptr;
+  IWbemObjectSink* pStubSink = nullptr;
+  try {
+    subscribe_wmi(pLoc, pSvc, pApp, pSink, pStubUnk, pStubSink);
+    bSubscription = true;
+  } catch(std::exception &ex) {
+    qDebug() << "couldn't subscribe to wmi evts:" << ex.what();
+  }
   DWORD ourPID = GetCurrentProcessId();
-  while (true) {
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS | TH32CS_SNAPTHREAD, 0);
-    if (snap == INVALID_HANDLE_VALUE)
-      continue;
-    PROCESSENTRY32 pe = {sizeof(pe)};
+  while (!isInterruptionRequested()) {
+    if (bSubscription) {
+      Sleep(1500);
+    } else {
+      HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS | TH32CS_SNAPTHREAD, 0);
+      if (snap == INVALID_HANDLE_VALUE)
+        continue;
+      PROCESSENTRY32 pe = {sizeof(pe)};
 
-    if (Process32First(snap, &pe)) {
-      while(Process32Next(snap, &pe)) {
-        if (strstr(pe.szExeFile, "Spotify.exe") == nullptr)
-          continue; // not Spotify.exe
+      if (Process32First(snap, &pe)) {
+        while(Process32Next(snap, &pe)) {
+          if (strstr(pe.szExeFile, "Spotify.exe") == nullptr)
+            continue; // not Spotify.exe
 
-        if (pe.th32ParentProcessID == ourPID)
-          continue; // we already loaded ourselves
+          if (pe.th32ParentProcessID == ourPID)
+            continue; // we already loaded ourselves
 
-        // i hate windows
-        HANDLE hProc;
-        if ((hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE, FALSE, pe.th32ProcessID)) == nullptr) {
-          g_MainWindow->add_log_entry("Failed to open PID %ld: %08x", pe.th32ProcessID, GetLastError());
-          continue;
+          // i hate windows
+          HANDLE hProc;
+          if ((hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE, FALSE, pe.th32ProcessID)) == nullptr) {
+            g_MainWindow->add_log_entry("Failed to open PID %ld: %08x", pe.th32ProcessID, GetLastError());
+            continue;
+          }
+          PROCESS_BASIC_INFORMATION pbi;
+          NtQueryInformationProcess(hProc, 0, &pbi, sizeof(pbi), nullptr);
+          PVOID rtlUserProcParamsAddress;
+
+          if(!ReadProcessMemory(hProc,
+                                &pbi.PebBaseAddress->ProcessParameters,
+                                &rtlUserProcParamsAddress,
+                                sizeof(PVOID),
+                                nullptr)) {
+            // this happens a lot
+            //g_MainWindow->add_log_entry("Failed to read ProcessParameters address: %08x", GetLastError());
+            continue;
+          }
+
+          UNICODE_STRING commandLine;
+          if(!ReadProcessMemory(hProc,
+                                &reinterpret_cast<_RTL_USER_PROCESS_PARAMETERS *>(rtlUserProcParamsAddress)->CommandLine,
+                                &commandLine,
+                                sizeof(commandLine),
+                                nullptr)) {
+            g_MainWindow->add_log_entry("Failed to read CommandLine address: %08x", GetLastError());
+            continue;
+          }
+
+          wchar_t* commandLineContents = reinterpret_cast<wchar_t*>(malloc(commandLine.Length));
+          if(!ReadProcessMemory(hProc,
+                                commandLine.Buffer,
+                                commandLineContents,
+                                commandLine.Length,
+                                nullptr)) {
+            g_MainWindow->add_log_entry("Failed to read CommandLine buffer: %08x", GetLastError());
+            continue;
+          }
+          if (wcsstr(commandLineContents, L"--type") != nullptr) {
+            free(commandLineContents);
+            continue; // this isn't the main Spotify process, also this is stupid
+          }
+          g_MainWindow->add_log_entry("Found main Spotify hProc: %ld", pe.th32ProcessID);
+          char path[MAX_PATH];
+          GetModuleFileNameEx(hProc, nullptr, path, sizeof(path));
+
+
+          // this could be a Qsignal probably
+          spotify_process_found(hProc, pe.th32ProcessID, path);
         }
-        PROCESS_BASIC_INFORMATION pbi;
-        NtQueryInformationProcess(hProc, 0, &pbi, sizeof(pbi), nullptr);
-        PVOID rtlUserProcParamsAddress;
-
-        if(!ReadProcessMemory(hProc,
-                              &pbi.PebBaseAddress->ProcessParameters,
-                              &rtlUserProcParamsAddress,
-                              sizeof(PVOID),
-                              nullptr)) {
-          // this happens a lot
-          //g_MainWindow->add_log_entry("Failed to read ProcessParameters address: %08x", GetLastError());
-          continue;
-        }
-
-        UNICODE_STRING commandLine;
-        if(!ReadProcessMemory(hProc,
-                              &reinterpret_cast<_RTL_USER_PROCESS_PARAMETERS *>(rtlUserProcParamsAddress)->CommandLine,
-                              &commandLine,
-                              sizeof(commandLine),
-                              nullptr)) {
-          g_MainWindow->add_log_entry("Failed to read CommandLine address: %08x", GetLastError());
-          continue;
-        }
-
-        wchar_t* commandLineContents = reinterpret_cast<wchar_t*>(malloc(commandLine.Length));
-        if(!ReadProcessMemory(hProc,
-                              commandLine.Buffer,
-                              commandLineContents,
-                              commandLine.Length,
-                              nullptr)) {
-          g_MainWindow->add_log_entry("Failed to read CommandLine buffer: %08x", GetLastError());
-          continue;
-        }
-        if (wcsstr(commandLineContents, L"--type") != nullptr) {
-          free(commandLineContents);
-          continue; // this isn't the main Spotify process, also this is stupid
-        }
-        g_MainWindow->add_log_entry("Found main Spotify hProc: %ld", pe.th32ProcessID);
-        char path[MAX_PATH];
-        GetModuleFileNameEx(hProc, nullptr, path, sizeof(path));
-
-
-        // this could be a Qsignal probably
-        spotify_process_found(hProc, pe.th32ProcessID, path);
       }
+      CloseHandle(snap);
     }
-    CloseHandle(snap);
+  }
+
+  if (bSubscription) {
+    if (pSvc != nullptr) pSvc->Release();
+    if (pLoc != nullptr) pLoc->Release();
+    if (pApp != nullptr) pApp->Release();
+    if (pStubUnk != nullptr) pStubUnk->Release();
+    if (pSink != nullptr) pSink->Release();
+    if (pStubSink != nullptr) pStubSink->Release();
+    CoUninitialize();
   }
 }
 
-void Loader::spotify_process_found(HANDLE hOrigProc, DWORD dwPid, char path[MAX_PATH]) {
+uint32_t Loader::spotify_process_found(HANDLE hOrigProc, DWORD dwPid, char path[MAX_PATH]) {
   if (!TerminateProcess(hOrigProc, 0)) {
     g_MainWindow->add_log_entry("Failed to terminate Spotify: %08x", GetLastError());
-    return;
+    return 0;
   }
   CloseHandle(hOrigProc);
 
@@ -156,7 +277,7 @@ void Loader::spotify_process_found(HANDLE hOrigProc, DWORD dwPid, char path[MAX_
   // PathCchRemoveFileSpec is only available Win8+ and I'm lazy
   if (!PathRemoveFileSpecA(startPath)) {
     g_MainWindow->add_log_entry("PathRemoveFileSpecA failed: %08x", GetLastError());
-    return;
+    return 0;
   }
   STARTUPINFO si;
   PROCESS_INFORMATION pi;
@@ -176,7 +297,7 @@ void Loader::spotify_process_found(HANDLE hOrigProc, DWORD dwPid, char path[MAX_
                      &si,
                      &pi)) {
     g_MainWindow->add_log_entry("Failed to create new Spotify process: %08x", GetLastError());
-    return;
+    return 0;
   }
   HANDLE hProc = pi.hProcess;
   HANDLE hThread = pi.hThread;
@@ -187,8 +308,17 @@ void Loader::spotify_process_found(HANDLE hOrigProc, DWORD dwPid, char path[MAX_
 
   // Write DLL path to new process
   // TODO: verify signature in rel builds
-  const wchar_t* dllPath = get_dll_path().wstring().c_str();
+  auto dllp = fs::current_path();
+  if (fs::exists(dllp / "hook.dll")) {
+    dllp =  dllp/"hook.dll";
+  } else if (fs::exists(dllp / "hook/hook.dll")) {
+    dllp = dllp/"hook/hook.dll";
+  }
+  if (!fs::is_regular_file(dllp)) return 0;
+  auto st = dllp.wstring();
+  const wchar_t* dllPath = st.c_str();
   SIZE_T dwSize = (wcslen(dllPath) + 1) * sizeof(wchar_t);
+
   auto pathAddress = VirtualAllocEx(hProc,
                                     nullptr, dwSize,
                                     MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
@@ -197,7 +327,7 @@ void Loader::spotify_process_found(HANDLE hOrigProc, DWORD dwPid, char path[MAX_
                           &byteBuf)) {
     g_MainWindow->add_log_entry("Failed to write DLL path to Spotify process: %08x", GetLastError());
     TerminateProcess(hProc, 0);
-    return;
+    return 0;
   }
   g_MainWindow->add_log_entry("Allocated DLL path at %08x and wrote %ld bytes", pathAddress, byteBuf);
 
@@ -236,10 +366,14 @@ void Loader::spotify_process_found(HANDLE hOrigProc, DWORD dwPid, char path[MAX_
   if (WaitForSingleObject(hInjectThread, 10000) == WAIT_TIMEOUT) {
     g_MainWindow->add_log_entry("Waiting for inject thread timed out (10 seconds)");
     TerminateProcess(hProc, 1);
-    return;
+    return 0;
   }
   Sleep(3000);
   g_MainWindow->add_log_entry("Injection complete!");
   TerminateThread(hLoopThread, 0);
   ResumeThread(hThread);
+  // TODO: free DLL path from proc mem
+  return pi.dwProcessId;
 }
+
+

@@ -41,6 +41,7 @@ add_executable(customspotify
         src/main.cpp
         src/startup.cpp src/startup.h
         src/loader/loader.cpp src/loader/loader.h src/loader/ntdll.h
+        src/loader/eventsink.cpp src/loader/eventsink.h
         src/windows/MainWindow.cpp src/windows/MainWindow.h src/windows/MainWindow.ui
         src/windows/ScriptWidget.cpp src/windows/ScriptWidget.h src/windows/ScriptWidget.ui
         src/theme/theme.cpp src/theme/theme.h
@@ -55,4 +56,7 @@ else()
             ${CUSTOMSPOTIFY_LL})
 endif()
 
-
+add_custom_target(hook_gui)
+add_dependencies(hook_gui
+        hook
+        customspotify)

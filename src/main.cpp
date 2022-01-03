@@ -8,7 +8,7 @@
 
 #include "startup.h"
 
-Loader* g_Loader = new Loader();
+Loader* g_Loader;
 MainWindow* g_MainWindow;
 
 ScriptManager* g_ScriptManager;
@@ -54,6 +54,7 @@ int main(int argc, char** argv) {
 
   init_theme();
   startup_create_directories();
+  g_Loader = new Loader();
 
   qRegisterMetaType<std::string>();
 
@@ -61,7 +62,6 @@ int main(int argc, char** argv) {
 
   g_MainWindow = new MainWindow();
   g_MainWindow->show();
-
   /*if (false) {
     HANDLE hToken, hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, GetCurrentProcessId());
     if (OpenProcessToken(hProc, TOKEN_ALL_ACCESS, &hToken) ==0){
@@ -84,7 +84,7 @@ int main(int argc, char** argv) {
     CloseHandle(hProc);
   }*/
 
-  g_Loader->start();
+  //g_Loader->start();
 
   return app.exec();
 }

@@ -9,8 +9,14 @@
 
 class Loader : public QThread {
   Q_OBJECT
+public:
+  explicit Loader();
   [[noreturn]] void run() override;
-  void spotify_process_found(HANDLE hProc, DWORD dwPid, char path[MAX_PATH]);
+
+  /// returns new process ID
+  uint32_t spotify_process_found(HANDLE hProc, DWORD dwPid, char path[MAX_PATH]);
+private:
+  bool bSubscription = false;
 };
 
 extern Loader* g_Loader;
