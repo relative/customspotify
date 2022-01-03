@@ -26,6 +26,7 @@ public slots:
   void scriptAdded(const std::string& filename, Script* script);
   void scriptRemoved(const std::string& filename, Script* script);
   void scriptUpdated(const std::string& filename, Script* script);
+  void openScriptsFolder();
 private:
   Ui::MainWindow *ui;
 };

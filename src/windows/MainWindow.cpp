@@ -6,16 +6,20 @@
 #include "ui_mainwindow.h"
 #include <QScrollBar>
 #include <QtDebug>
+#include <Windows.h>
+#include <shellapi.h>
 #include "ScriptWidget.h"
 #include "../script/scriptmanager.h"
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
   ui->setupUi(this);
 
+  // Scripts tab
   this->setup_scripts();
   connect(g_ScriptManager, &ScriptManager::scriptAdded, this, &MainWindow::scriptAdded);
   connect(g_ScriptManager, &ScriptManager::scriptRemoved, this, &MainWindow::scriptRemoved);
   connect(g_ScriptManager, &ScriptManager::scriptUpdated, this, &MainWindow::scriptUpdated);
+  connect(ui->btnScriptsFolder, &QAbstractButton::clicked, this, &MainWindow::openScriptsFolder);
 }
 
 MainWindow::~MainWindow() noexcept {
@@ -37,7 +41,6 @@ void MainWindow::add_script(const std::string& filename, Script *script) {
 void MainWindow::scriptAdded(const std::string& filename, Script* script) {
   this->add_script(filename, script);
 }
-
 void MainWindow::scriptRemoved(const std::string& filename, Script* script) {
   for (int i = 0; i < ui->lstScripts->count(); ++i) {
     auto listItem = ui->lstScripts->item(i);
@@ -68,7 +71,15 @@ void MainWindow::scriptUpdated(const std::string& filename, Script* script) {
     }
   }
 }
-
+void MainWindow::openScriptsFolder() {
+  ShellExecuteA(
+      reinterpret_cast<HWND>(winId()),
+      "open",
+      g_ScriptManager->directory.c_str(),
+      nullptr,
+      nullptr,
+      SW_SHOWDEFAULT);
+}
 void MainWindow::add_log_entry(const char* fmt, ...) {
   char buf[4096];
   va_list argptr;
